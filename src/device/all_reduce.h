@@ -8,7 +8,6 @@
 #include "device.h"
 #include "collectives.h"
 #include "primitives.h"
-
 namespace {
 template <typename T, typename RedOp, typename Proto>
 __device__ __forceinline__ void runRing(int tid, int nthreads, struct ncclDevWorkColl* work) {

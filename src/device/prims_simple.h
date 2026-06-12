@@ -222,6 +222,10 @@ class Primitives<T, RedOp, Fan, Direct, ProtoSimple<SlicePerChunk, StepPerSlice,
           T* userOutput = (T*)ncclShmem.groups[group].userOutput;
           if (Src) ncclShmem.groups[group].srcs[0] = (SrcBuf == Input ? userInput : userOutput) + srcIx + offset;
           if (Dst) ncclShmem.groups[group].dsts[0] = (DstBuf == Input ? userInput : userOutput) + dstIx + offset;
+          if (ncclShmem.groups[group].mask){
+            //TODO(must) if use 1-bit ...
+            ncclShmem.groups[group].local_mask = (T*)ncclShmem.groups[group].mask + srcIx + offset;
+          }
         }
         waitPeer<DirectRecv, DirectSend, Recv, Send, Src, Dst>(srcIx, dstIx, offset, sliceSize);
         subBarrier();
@@ -751,6 +755,7 @@ public:
       ncclShmem.groups[group].userInput = (void*)inputBuf;
       ncclShmem.groups[group].userOutput = (void*)outputBuf;
       ncclShmem.groups[group].redOpArgs = redOpArg; // scaler for local input
+      ncclShmem.groups[group].mask = work ? (void*)work->coll.extrabuff : nullptr;
     }
 
     if (Direct && ipcReg) {

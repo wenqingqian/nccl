@@ -163,16 +163,19 @@ ncclResult_t ncclAlltoAll(const void* sendbuff, void* recvbuff, size_t count, nc
   return ncclEnqueueCheck(&info);
 }
 
-NCCL_API(ncclResult_t, ncclAllReduce, const void* sendbuff, void* recvbuff, size_t count, ncclDataType_t datatype,
+NCCL_API(ncclResult_t, ncclAllReduce, const void* sendbuff, void* recvbuff, const void* extrabuff, size_t count, ncclDataType_t datatype,
          ncclRedOp_t op, ncclComm* comm, cudaStream_t stream);
-ncclResult_t ncclAllReduce(const void* sendbuff, void* recvbuff, size_t count, ncclDataType_t datatype, ncclRedOp_t op,
+ncclResult_t ncclAllReduce(const void* sendbuff, void* recvbuff, const void* extrabuff, size_t count, ncclDataType_t datatype, ncclRedOp_t op,
                            ncclComm* comm, cudaStream_t stream) {
   NVTX3_FUNC_WITH_PARAMS(AllReduce, NcclNvtxParamsAllReduce,
                          NVTX3_PAYLOAD(comm ? comm->commHash : 0, count * ncclTypeSize(datatype), op));
 
   struct ncclInfo info = {
     ncclFuncAllReduce,    "AllReduce",         sendbuff, recvbuff, count, datatype, op, 0, comm, stream, /* Args */
-    ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS
+    ALLREDUCE_CHUNKSTEPS, ALLREDUCE_SLICESTEPS,
+    0, nullptr, 0, 0, 0, /* one-sided default */
+    0, nullptr, /* wait signal default */
+    extrabuff
   };
   return ncclEnqueueCheck(&info);
 }
