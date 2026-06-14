@@ -283,33 +283,48 @@ def timed_all_reduce(tensor, mask=None, version="v0", warmup=5, iters=10):
 
     Args:
         tensor: input tensor.
-        mask: mask tensor, or None to use the no-mask baseline.
-        version: mask version to use when mask is not None; ignored for no-mask.
+        mask: mask tensor, or None to use the no-mask path.  When None and
+            version is "nomask", the fixed upstream NCCL baseline is used;
+            otherwise the requested mask library version is used with a NULL
+            mask pointer.
+        version: mask version to use; "nomask" selects the fixed baseline.
         warmup: number of warmup iterations.
         iters: number of timed iterations.
     """
     stream = torch.cuda.current_stream(tensor.device)
     for _ in range(warmup):
         if mask is None:
-            vanilla_all_reduce(tensor.clone())
+            if version == "nomask":
+                vanilla_all_reduce(tensor.clone())
+            else:
+                mask_all_reduce(tensor.clone(), None, version=version)
         else:
             mask_all_reduce(tensor.clone(), mask, version=version)
     stream.synchronize()
 
     times = []
     for _ in range(iters):
+        # Prepare the input before the timed region so clone cost is excluded.
+        t = tensor.clone()
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
         start.record(stream)
         if mask is None:
-            vanilla_all_reduce(tensor.clone())
+            if version == "nomask":
+                vanilla_all_reduce(t)
+            else:
+                mask_all_reduce(t, None, version=version)
         else:
-            mask_all_reduce(tensor.clone(), mask, version=version)
+            mask_all_reduce(t, mask, version=version)
         end.record(stream)
         stream.synchronize()
         times.append(start.elapsed_time(end))
 
-    return sum(times) / len(times)
+    # Drop the fastest 1/3 and slowest 1/3, then average the remaining middle.
+    times.sort()
+    drop = iters // 3
+    trimmed = times[drop:iters - drop]
+    return sum(trimmed) / len(trimmed)
 
 
 def free_memory():

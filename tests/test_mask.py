@@ -141,8 +141,20 @@ def _parse_distribution_list(s):
 
 
 def _no_mask_baseline(size, device, warmup, iters):
+    """Measure no-mask latency with the fixed upstream NCCL baseline."""
     tensor = torch.ones(size, device=device, dtype=torch.float32)
-    t = timed_all_reduce(tensor, mask=None, warmup=warmup, iters=iters)
+    t = timed_all_reduce(tensor, mask=None, version="nomask", warmup=warmup, iters=iters)
+    bytes_size = size * 4
+    bw = (bytes_size / 1e9) / (t / 1000)
+    del tensor
+    free_memory()
+    return t, bw
+
+
+def _no_mask_version(size, device, version, warmup, iters):
+    """Measure no-mask latency through a mask library version (mask=None)."""
+    tensor = torch.ones(size, device=device, dtype=torch.float32)
+    t = timed_all_reduce(tensor, mask=None, version=version, warmup=warmup, iters=iters)
     bytes_size = size * 4
     bw = (bytes_size / 1e9) / (t / 1000)
     del tensor
@@ -189,14 +201,18 @@ def run_perf(args):
         print(f"versions: {versions}")
         print(f"warmup={args.warmup}, iters={args.iters}")
         print("")
-        print(f"{'size(MB)':>8}  {'sparsity':>8}  {'distribution':<12}  {'real_sparsity':>13}  {'version':>7}  {'no_mask(ms)':>11}  {'mask(ms)':>8}  {'speedup':>7}  {'vs_prev':>7}  {'no_mask(GB/s)':>13}  {'mask(GB/s)':>10}  {'check':>5}")
+        print(f"{'size(MB)':>8}  {'sparsity':>8}  {'distribution':<12}  {'real_sparsity':>13}  {'version':>7}  "
+              f"{'no_mask_baseline(ms)':>20}  {'no_mask(ms)':>11}  {'mask(ms)':>8}  {'speedup':>7}  {'vs_prev':>7}  "
+              f"{'no_mask_vs_baseline':>20}  {'no_mask(GB/s)':>13}  {'mask(GB/s)':>10}  {'check':>5}")
 
     for size in sizes:
         bytes_size = size * 4
         mb = bytes_size / (1024 * 1024)
 
-        # One no-mask baseline per size.
-        t_no, bw_no = _no_mask_baseline(size, device, args.warmup, args.iters)
+        # Fixed upstream NCCL no-mask baseline, measured once per size.
+        t_baseline, bw_baseline = _no_mask_baseline(size, device, args.warmup, args.iters)
+        # Per-version no-mask result (mask=None), lazily measured once per size.
+        version_no_mask = {}
 
         for target_sparsity in sparsities:
             for pattern in distributions:
@@ -205,6 +221,12 @@ def run_perf(args):
                 prev_version = None
 
                 for version in versions:
+                    if version not in version_no_mask:
+                        version_no_mask[version] = _no_mask_version(
+                            size, device, version, args.warmup, args.iters
+                        )
+                    t_no_version, bw_no_version = version_no_mask[version]
+
                     tensor = torch.ones(size, device=device, dtype=torch.float32) * (rank + 1)
                     t_mask = timed_all_reduce(tensor, mask=mask, version=version, warmup=args.warmup, iters=args.iters)
                     bw_mask = (bytes_size / 1e9) / (t_mask / 1000)
@@ -217,16 +239,17 @@ def run_perf(args):
                         ok = _verify_mask(rank, world_size, check_tensor, mask, version)
 
                     if rank == 0:
-                        speedup = t_no / t_mask if t_mask > 0 else float('inf')
+                        speedup = t_baseline / t_mask if t_mask > 0 else float('inf')
                         if prev_t_mask is not None and prev_t_mask > 0:
                             vs_prev = prev_t_mask / t_mask
                             vs_prev_str = f"{vs_prev:6.2f}x"
                         else:
                             vs_prev_str = "      -"
+                        no_mask_vs_baseline = t_baseline / t_no_version if t_baseline > 0 else float('inf')
                         check_str = "OK" if ok else "FAIL"
                         print(f"{mb:8.0f}  {target_sparsity*100:7.0f}%  {pattern:12s}  {actual*100:12.1f}%  "
-                              f"{version:7s}  {t_no:11.3f}  {t_mask:8.3f}  {speedup:6.2f}x  {vs_prev_str}  "
-                              f"{bw_no:13.2f}  {bw_mask:10.2f}  {check_str:>5s}")
+                              f"{version:7s}  {t_baseline:20.3f}  {t_no_version:11.3f}  {t_mask:8.3f}  {speedup:6.2f}x  {vs_prev_str}  "
+                              f"{no_mask_vs_baseline:19.2f}x  {bw_baseline:13.2f}  {bw_mask:10.2f}  {check_str:>5s}")
 
                     prev_t_mask = t_mask
                     prev_version = version

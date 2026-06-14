@@ -237,7 +237,9 @@ __device__ __forceinline__ void reduceCopyPacksMask(int nThreads, int& thread, u
     for (int d = 0; d < MinDsts; d++) {
       minDsts[d] += (nWarps - 1) * BytePerHunk;
     }
-    mask_addr += nWarps * BytePerHunk;
+    // mask_addr already advanced by BytePerHunk inside the Unroll loop, so skip
+    // only the hunks processed by other warps in this iteration.
+    mask_addr += (nWarps - 1) * BytePerHunk;
     threadBytesBehind += nWarps * BytePerHunk;
     threadBytesAhead -= nWarps * BytePerHunk;
     nHunksAhead -= nWarps;
