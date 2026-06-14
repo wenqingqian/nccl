@@ -5,9 +5,9 @@
  * See LICENSE.txt for more license information
  *************************************************************************/
 
-template <typename T, typename RedOp, typename Fan, int Direct, int P2p, bool isNetOffload>
-class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p, isNetOffload>
-  : public PrimitivesWithoutDirect<Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p, isNetOffload>> {
+template <typename T, typename RedOp, typename Fan, int Direct, int P2p, bool isNetOffload, bool UseMask>
+class Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p, isNetOffload, UseMask>
+  : public PrimitivesWithoutDirect<Primitives<T, RedOp, Fan, Direct, ProtoLL, P2p, isNetOffload, UseMask>> {
   // In the case of Fan::MaxRecv == 0, we need to force MaxRecv to 1 for this to compile
   // This is because of a recv buffer which is allocated to MaxRecv length in send-only cases.
   static constexpr int MaxRecv = Fan::MaxRecv > 1 ? Fan::MaxRecv : 1;

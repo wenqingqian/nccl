@@ -141,6 +141,21 @@ if [[ -n "${REBUILD_VERSION}" ]]; then
     bash "${SCRIPT_DIR}/rebuild_nccl_libs.sh" "${REBUILD_VERSION}"
 fi
 
+# Display sizes of all loaded NCCL libraries.
+step "Loaded NCCL libraries"
+LIBS_DIR="/workspace/nccl/libs"
+if [[ -d "${LIBS_DIR}" ]]; then
+    for lib in "${LIBS_DIR}"/nomask/libnccl-nomask.so "${LIBS_DIR}"/v*/libnccl-mask.so; do
+        [[ -f "${lib}" ]] || continue
+        dir_name=$(basename "$(dirname "${lib}")")
+        file_name=$(basename "${lib}")
+        size=$(du -h "${lib}" | cut -f1)
+        info "${dir_name}/${file_name}: ${size}"
+    done
+else
+    warn "Library directory not found: ${LIBS_DIR}"
+fi
+
 # Correctness tests (always run, abort on failure)
 step "Step 1: Correctness tests"
 if ! run_torchrun test_mask.py correctness; then

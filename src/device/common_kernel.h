@@ -528,19 +528,22 @@ __device__ __forceinline__ void reduceCopy(int thread, int nThreads, uint64_t re
 }
 
 template <int Unroll, typename RedFn, typename T, int MultimemSrcs, int MinSrcs, int MaxSrcs, int MultimemDsts,
-          int MinDsts, int MaxDsts, int PreOpSrcs, typename IntBytes>
+          int MinDsts, int MaxDsts, int PreOpSrcs, bool UseMask = false, typename IntBytes>
 __device__ __forceinline__ void reduceCopy(int thread, int nThreads, uint64_t redArg, bool postOp, int nSrcs,
                                            void** srcPtrs, int nDsts, void** dstPtrs, IntBytes nElts) {
-  bool masked = ncclShmem.groups[0].mask != nullptr;
-  if (!masked){
-    reduceCopy<Unroll, RedFn, T, MultimemSrcs, MinSrcs, MaxSrcs, MultimemDsts, MinDsts, MaxDsts, PreOpSrcs, IntBytes>(
-      thread, nThreads, redArg, postOp, nSrcs, [=] __device__(int i) { return srcPtrs[i]; }, nDsts,
-      [=] __device__(int i) { return dstPtrs[i]; }, nElts);
-  }else{
-    reduceCopyMask<Unroll, RedFn, T, MultimemSrcs, MinSrcs, MaxSrcs, MultimemDsts, MinDsts, MaxDsts, PreOpSrcs, IntBytes>(
-      thread, nThreads, redArg, postOp, nSrcs, [=] __device__(int i) { return srcPtrs[i]; }, nDsts,
-      [=] __device__(int i) { return dstPtrs[i]; }, nElts);
+  if constexpr (UseMask) {
+    bool masked = ncclShmem.groups[0].mask != nullptr;
+    if (__builtin_expect(masked, false)) {
+      reduceCopyMask<Unroll, RedFn, T, MultimemSrcs, MinSrcs, MaxSrcs, MultimemDsts, MinDsts, MaxDsts, PreOpSrcs,
+                      IntBytes>(thread, nThreads, redArg, postOp, nSrcs,
+                                [=] __device__(int i) { return srcPtrs[i]; }, nDsts,
+                                [=] __device__(int i) { return dstPtrs[i]; }, nElts);
+      return;
+    }
   }
+  reduceCopy<Unroll, RedFn, T, MultimemSrcs, MinSrcs, MaxSrcs, MultimemDsts, MinDsts, MaxDsts, PreOpSrcs, IntBytes>(
+    thread, nThreads, redArg, postOp, nSrcs, [=] __device__(int i) { return srcPtrs[i]; }, nDsts,
+    [=] __device__(int i) { return dstPtrs[i]; }, nElts);
 }
 
 #endif // COMMON_KERNEL_H_

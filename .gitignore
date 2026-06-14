@@ -36,3 +36,4 @@ claude
 CLAUDE.md
 output.log
 libs
+tests/plots
