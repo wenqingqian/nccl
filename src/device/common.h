@@ -43,6 +43,8 @@ struct ncclShmemGroup {
   } devicePlugin;
   int32_t dstSizes[NCCL_MAX_ARITY + 1];
   uint64_t redOpArgs;
+  void* mask;
+  void* local_mask;
 };
 
 struct ncclShmemData {

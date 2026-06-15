@@ -38,6 +38,7 @@ struct ncclInfo {
   // WaitSignal descriptors
   int nDesc;
   ncclWaitSignalDesc_t* signalDescs;
+  const void* extrabuff;
 };
 
 #endif
